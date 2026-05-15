@@ -88,7 +88,7 @@ def fetch_usage(source: str, sessions_dir: Path, hermes_repo: Path | None) -> Us
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Emit Codex usage as Waybar custom-module JSON")
     parser.add_argument("--source", choices=("logs", "hermes", "auto"), default=os.environ.get("WAYBAR_CODEX_USAGE_SOURCE", "logs"), help="usage source (default: logs; hermes is optional/experimental)")
-    parser.add_argument("--offline", action="store_true", help="alias for --source logs")
+    parser.add_argument("--offline", action="store_true", help="legacy alias for --source logs; bypasses online/cache reads")
     parser.add_argument("--sessions-dir", type=Path, default=default_sessions_dir(), help="Codex session directory or a single JSONL file")
     parser.add_argument("--hermes-repo", type=Path, default=None, help="optional Hermes Agent checkout for --source hermes/auto")
     parser.add_argument("--cache", type=Path, default=default_cache_path(), help="rendered Waybar payload cache path")
@@ -108,7 +108,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     source = "logs" if args.offline else args.source
 
-    if not args.refresh and cache_fresh(args.cache, args.ttl):
+    # Preserve the legacy local-widget meaning of --offline: do not call the
+    # account API and do not reuse a cached online/API response.
+    if not args.refresh and not args.offline and cache_fresh(args.cache, args.ttl):
         cached = read_cache(args.cache)
         if cached:
             emit(cached, plain=args.plain)
