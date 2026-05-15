@@ -10,7 +10,7 @@ CX 21.2% W10.2%
 
 - `CX` is the compact Codex label.
 - The first percentage is the current/session usage window.
-- `W` is the weekly usage window when Codex exposes one in local logs.
+- `W` is the weekly usage window when the selected backend exposes one.
 
 The project is intentionally small: Python standard library only at runtime, no daemon, no telemetry, and Waybar-friendly exit behavior.
 
@@ -88,6 +88,19 @@ If `waybar-codex-usage` is not on Waybar's PATH, use the full path from:
 uv tool dir --bin
 ```
 
+If you use Codex mostly through an agent harness such as Hermes Agent and want account-level/live subscription usage, prefer the Hermes helper or `auto` mode in Waybar:
+
+```jsonc
+"custom/codex": {
+  "exec": "waybar-codex-usage --source auto",
+  "return-type": "json",
+  "interval": 300,
+  "signal": 8,
+  "tooltip": true,
+  "on-click": "waybar-codex-usage --source auto --refresh >/dev/null 2>&1; pkill -RTMIN+8 -x waybar"
+}
+```
+
 Example configs live in [`examples/`](examples/).
 
 ## CLI usage
@@ -106,15 +119,29 @@ Default source is `logs`, which parses local Codex CLI session files. You can al
 waybar-codex-usage --sessions-dir tests/fixtures/codex-session.jsonl
 ```
 
+### What `logs` / local mode means
+
+Local mode is an offline parser for the Codex CLI JSONL files under `~/.codex/sessions`. It does **not** call OpenAI or Hermes, and it does not know your account-level subscription state directly. It only reports the newest `payload.rate_limits` snapshot from a local `token_count` event.
+
+That distinction matters because Codex can create recent session files that do not contain `token_count.rate_limits` events, and agent harnesses may use Codex without writing the same local rate-limit snapshots. In those cases, local mode may be missing, old, or marked `stale` even though your real account usage has changed.
+
+Use local mode when you want a dependency-free, privacy-preserving offline fallback. If you run Codex primarily through an agent harness such as Hermes Agent and want current subscription/account usage, enable the Hermes helper instead:
+
+```bash
+waybar-codex-usage --source hermes
+# or: Hermes first, local logs as fallback
+waybar-codex-usage --source auto
+```
+
 ## Backend support
 
 `waybar-codex-usage` is local-first. Version `0.1` is feature-complete for the local log parser; account-level backends are optional and intentionally conservative.
 
 | Source | Status | Network | Auth/token handling | What it reads | Notes |
 | --- | --- | --- | --- | --- | --- |
-| `logs` | Stable default | No | None | Latest `token_count.rate_limits` snapshot from local Codex CLI JSONL sessions | Best portable backend. Works offline, but only knows what Codex wrote to local logs. |
-| `hermes` | Optional / experimental | Usually | Delegated to an existing Hermes Agent checkout | `agent.account_usage.fetch_account_usage("openai-codex")` | Useful if you already run Hermes. This package does not store OAuth tokens. It imports Hermes directly when dependencies are available, otherwise it tries the Hermes venv Python. Can break if Hermes or the upstream account API changes. |
-| `auto` | Convenience mode | Depends | Same as selected backend | Tries `hermes`, then falls back to `logs` | Not a separate backend; good for personal machines where stale local data is better than a hard error. |
+| `logs` | Stable default | No | None | Latest `token_count.rate_limits` snapshot from local Codex CLI JSONL sessions | Portable offline fallback. Only knows what Codex wrote to local logs, so it can be old/stale if recent sessions lack rate-limit snapshots or Codex was run through another harness. |
+| `hermes` | Optional / experimental | Usually | Delegated to an existing Hermes Agent checkout | `agent.account_usage.fetch_account_usage("openai-codex")` | Recommended if you already run Codex through Hermes Agent and want current account/subscription usage in Waybar. This package does not store OAuth tokens. It imports Hermes directly when dependencies are available, otherwise it tries the Hermes venv Python. Can break if Hermes or the upstream account API changes. |
+| `auto` | Convenience mode | Depends | Same as selected backend | Tries `hermes`, then falls back to `logs` | Not a separate backend; good for personal machines where live Hermes usage is preferred, but stale local data is better than a hard error. |
 
 Examples:
 
