@@ -1,0 +1,21 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+uv.lock
+.cache/
+*.tmp
+.DS_Store
+
+# Never commit private Codex/Hermes runtime data.
+.codex/
+.hermes/
+*.sqlite
+*.db
+*.jsonl.private

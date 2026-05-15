@@ -1,0 +1,40 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "waybar-codex-usage"
+version = "0.1.0"
+description = "Codex usage meter for Waybar/Hyprland-style Linux desktops"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [{name = "Logan Saether"}]
+keywords = ["codex", "waybar", "hyprland", "linux", "statusbar"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Topic :: Desktop Environment",
+  "Topic :: Utilities",
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/lsaether/waybar-codex-usage"
+Repository = "https://github.com/lsaether/waybar-codex-usage"
+Issues = "https://github.com/lsaether/waybar-codex-usage/issues"
+
+[project.scripts]
+waybar-codex-usage = "waybar_codex_usage.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/waybar_codex_usage"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

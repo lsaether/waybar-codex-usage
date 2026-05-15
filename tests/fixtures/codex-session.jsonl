@@ -1,0 +1,3 @@
+{"timestamp":"2026-05-15T10:00:00Z","type":"event_msg","payload":{"type":"user_message","message":"this fake prompt must not be parsed"}}
+{"timestamp":"2026-05-15T10:01:00Z","type":"event_msg","payload":{"type":"token_count","input_tokens":123,"rate_limits":{"primary":{"used_percent":18.5,"resets_at":"2026-05-15T15:00:00Z","window_minutes":300},"secondary":{"used_percent":9.7,"resets_at":"2026-05-22T15:00:00Z","window_minutes":10080}},"plan_type":"pro"}}
+{"timestamp":"2026-05-15T10:02:00Z","type":"event_msg","payload":{"type":"token_count","input_tokens":456,"rate_limits":{"primary":{"used_percent":21.2,"resets_at":"2026-05-15T16:00:00Z","window_minutes":300},"secondary":{"used_percent":10.2,"resets_at":"2026-05-22T16:00:00Z","window_minutes":10080}},"plan_type":"pro"}}

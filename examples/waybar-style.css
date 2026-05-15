@@ -1,0 +1,20 @@
+/* Flat statusline-style module. */
+#custom-codex {
+  padding: 0 10px;
+  color: #9ad7a6;
+  border-left: 1px solid rgba(120, 170, 130, 0.35);
+  background: transparent;
+}
+
+#custom-codex.warning {
+  color: #d8c56d;
+}
+
+#custom-codex.critical,
+#custom-codex.error {
+  color: #e06c75;
+}
+
+#custom-codex.stale {
+  color: #7f9f86;
+}

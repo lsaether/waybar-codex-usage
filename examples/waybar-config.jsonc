@@ -1,0 +1,13 @@
+// Add `custom/codex` to your Waybar modules.
+{
+  "modules-right": ["custom/codex", "pulseaudio", "network", "cpu", "memory", "tray"],
+
+  "custom/codex": {
+    "exec": "waybar-codex-usage",
+    "return-type": "json",
+    "interval": 300,
+    "signal": 8,
+    "tooltip": true,
+    "on-click": "waybar-codex-usage --refresh >/dev/null 2>&1; pkill -RTMIN+8 -x waybar"
+  }
+}
