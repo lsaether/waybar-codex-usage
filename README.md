@@ -88,7 +88,7 @@ If `waybar-codex-usage` is not on Waybar's PATH, use the full path from:
 uv tool dir --bin
 ```
 
-If you use Codex mostly through an agent harness such as Hermes Agent and want account-level/live subscription usage, prefer the Hermes helper or `auto` mode in Waybar:
+If you already have Hermes Agent installed/configured and want account-level/live subscription usage, prefer the Hermes helper or `auto` mode in Waybar:
 
 ```jsonc
 "custom/codex": {
@@ -125,7 +125,7 @@ Local mode is an offline parser for the Codex CLI JSONL files under `~/.codex/se
 
 That distinction matters because Codex can create recent session files that do not contain `token_count.rate_limits` events, and agent harnesses may use Codex without writing the same local rate-limit snapshots. In those cases, local mode may be missing, old, or marked `stale` even though your real account usage has changed.
 
-Use local mode when you want a dependency-free, privacy-preserving offline fallback. If you run Codex primarily through an agent harness such as Hermes Agent and want current subscription/account usage, enable the Hermes helper instead:
+Use local mode when you want a dependency-free, privacy-preserving offline fallback. If you already have Hermes Agent installed/configured and want current subscription/account usage, enable the Hermes helper instead:
 
 ```bash
 waybar-codex-usage --source hermes
@@ -140,8 +140,8 @@ waybar-codex-usage --source auto
 | Source | Status | Network | Auth/token handling | What it reads | Notes |
 | --- | --- | --- | --- | --- | --- |
 | `logs` | Stable default | No | None | Latest `token_count.rate_limits` snapshot from local Codex CLI JSONL sessions | Portable offline fallback. Only knows what Codex wrote to local logs, so it can be old/stale if recent sessions lack rate-limit snapshots or Codex was run through another harness. |
-| `hermes` | Optional / experimental | Usually | Delegated to an existing Hermes Agent checkout | `agent.account_usage.fetch_account_usage("openai-codex")` | Recommended if you already run Codex through Hermes Agent and want current account/subscription usage in Waybar. This package does not store OAuth tokens. It imports Hermes directly when dependencies are available, otherwise it tries the Hermes venv Python. Can break if Hermes or the upstream account API changes. |
-| `auto` | Convenience mode | Depends | Same as selected backend | Tries `hermes`, then falls back to `logs` | Not a separate backend; good for personal machines where live Hermes usage is preferred, but stale local data is better than a hard error. |
+| `hermes` | Optional / experimental | Usually | Delegated to an existing Hermes Agent checkout | `agent.account_usage.fetch_account_usage("openai-codex")` | Requires Hermes Agent installed/configured locally with OpenAI-Codex auth. Does not require a Hermes TUI/gateway/daemon to be running. This package does not store OAuth tokens. It imports Hermes directly when dependencies are available, otherwise it tries the Hermes venv Python. Can break if Hermes or the upstream account API changes. |
+| `auto` | Convenience mode | Depends | Same as selected backend | Tries `hermes`, then falls back to `logs` | Not a separate backend; good for personal machines where live Hermes usage is preferred when Hermes is available, but stale local data is better than a hard error. On machines without Hermes, it behaves as local-log fallback. |
 
 Examples:
 
@@ -153,7 +153,7 @@ waybar-codex-usage --source auto
 
 Possible future backend work:
 
-- first-class direct Codex/OpenAI account API backend, if the auth and endpoint contract becomes stable enough to document safely;
+- first-class direct Codex/OpenAI account API backend, if the auth and endpoint contract becomes stable enough to document safely; this would be the path for live account usage without requiring Hermes Agent;
 - a small backend interface for third-party command/plugin sources;
 - parsers for any future official Codex usage export format;
 - more sanitized fixtures for new Codex log shapes.
