@@ -14,6 +14,8 @@ CX 21.2% W10.2%
 
 The project is intentionally small: Python standard library only at runtime, no daemon, no telemetry, and Waybar-friendly exit behavior.
 
+> **Hermes-adjacent reality check:** the best live/account-level data currently comes from the optional Hermes Agent backend (`--source hermes`, or `--source auto` for Hermes-first with local fallback). The default `logs` backend stays dependency-free and private, but it only knows about `token_count.rate_limits` snapshots Codex wrote locally, so it can lag or show stale data.
+
 ## Features
 
 - Parses local Codex CLI session JSONL files for `token_count.rate_limits` snapshots.
