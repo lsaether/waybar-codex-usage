@@ -106,21 +106,32 @@ Default source is `logs`, which parses local Codex CLI session files. You can al
 waybar-codex-usage --sessions-dir tests/fixtures/codex-session.jsonl
 ```
 
-### Optional Hermes backend
+## Backend support
 
-If you already run [Hermes Agent](https://hermes-agent.nousresearch.com/docs), you can opt into its OpenAI-Codex usage helper:
+`waybar-codex-usage` is local-first. Version `0.1` is feature-complete for the local log parser; account-level backends are optional and intentionally conservative.
+
+| Source | Status | Network | Auth/token handling | What it reads | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `logs` | Stable default | No | None | Latest `token_count.rate_limits` snapshot from local Codex CLI JSONL sessions | Best portable backend. Works offline, but only knows what Codex wrote to local logs. |
+| `hermes` | Optional / experimental | Usually | Delegated to an existing Hermes Agent checkout | `agent.account_usage.fetch_account_usage("openai-codex")` | Useful if you already run Hermes. This package does not store OAuth tokens. It imports Hermes directly when dependencies are available, otherwise it tries the Hermes venv Python. Can break if Hermes or the upstream account API changes. |
+| `auto` | Convenience mode | Depends | Same as selected backend | Tries `hermes`, then falls back to `logs` | Not a separate backend; good for personal machines where stale local data is better than a hard error. |
+
+Examples:
 
 ```bash
+waybar-codex-usage --source logs
 waybar-codex-usage --source hermes
-```
-
-or use Hermes first and fall back to local logs:
-
-```bash
 waybar-codex-usage --source auto
 ```
 
-The Hermes backend is optional and best-effort. It imports `agent.account_usage.fetch_account_usage('openai-codex')` from your Hermes checkout. If the upstream account API changes, this backend may break independently of the local-log backend.
+Possible future backend work:
+
+- first-class direct Codex/OpenAI account API backend, if the auth and endpoint contract becomes stable enough to document safely;
+- a small backend interface for third-party command/plugin sources;
+- parsers for any future official Codex usage export format;
+- more sanitized fixtures for new Codex log shapes.
+
+Browser scraping is intentionally not a planned default backend: it is fragile, privacy-sensitive, and a poor fit for a small Waybar module.
 
 ## Environment variables
 
@@ -131,6 +142,8 @@ The Hermes backend is optional and best-effort. It imports `agent.account_usage.
 | `WAYBAR_CODEX_USAGE_TTL` | Cache TTL seconds | `300` |
 | `WAYBAR_CODEX_USAGE_SOURCE` | `logs`, `hermes`, or `auto` | `logs` |
 | `HERMES_AGENT_REPO` | Hermes checkout for optional backend | `~/.hermes/hermes-agent` |
+| `HERMES_AGENT_PYTHON` | Python executable to run the Hermes backend with, useful when Hermes dependencies live in its venv | first existing of `<repo>/venv/bin/python3`, `<repo>/venv/bin/python`, `<repo>/.venv/bin/python3`, `<repo>/.venv/bin/python` |
+| `WAYBAR_CODEX_HERMES_TIMEOUT` | Hermes backend subprocess timeout seconds | `25` |
 
 ## Waybar classes
 
