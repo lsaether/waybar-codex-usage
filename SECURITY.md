@@ -4,4 +4,4 @@
 
 When reporting parser bugs, create a tiny sanitized fixture that includes only the `token_count.rate_limits` shape needed to reproduce the issue.
 
-The default `logs` backend does not use the network and does not store credentials. The optional Hermes backend delegates account access to an existing Hermes Agent installation and should be treated as best-effort.
+The default `logs` backend does not use the network and does not store credentials. The live Codex API backend reads the Codex CLI auth file and refreshes tokens in that same Codex-owned file; this package does not create a separate credential store.

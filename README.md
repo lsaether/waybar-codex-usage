@@ -15,7 +15,7 @@ CX 21.2% W10.2%
 
 The project is intentionally small: no daemon, no telemetry, and Waybar-friendly exit behavior. The live Codex API backend uses `httpx`; the default `logs` source still works without network access.
 
-> **Backend reality check:** the first-class live backend is now the Codex/ChatGPT usage API (`--source codex` / `--source codex-api`). The optional Hermes backend remains as a compatibility fallback for existing setups, but `--source auto` tries Codex directly before Hermes and local logs.
+> **Backend reality check:** the first-class live backend is the Codex/ChatGPT usage API (`--source codex` / `--source codex-api`). `--source auto` tries Codex directly first, then falls back to local logs.
 
 ## Features
 
@@ -24,7 +24,6 @@ The project is intentionally small: no daemon, no telemetry, and Waybar-friendly
 - Emits Waybar JSON with `text`, `tooltip`, `class`, `percentage`, and `alt`.
 - Caches rendered payloads to avoid scanning session logs every poll.
 - Click-refresh friendly with Waybar signals.
-- Optional deprecated Hermes Agent compatibility backend for users who already have Hermes configured.
 - Tooltip-only Spark limit rendering when the backend exposes Spark as a separate additional rate-limit bucket.
 - Graceful failure mode: prints `CX --` and exits `0` by default so Waybar does not flap.
 
@@ -95,7 +94,7 @@ If `waybar-codex-usage` is not on Waybar's PATH, use the full path from:
 uv tool dir --bin
 ```
 
-If you want live account-level subscription usage, prefer `auto` mode in Waybar. It tries the native Codex API first, then falls back to the deprecated Hermes compatibility helper, then local logs:
+If you want live account-level subscription usage, prefer `auto` mode in Waybar. It tries the native Codex API first, then falls back to local logs:
 
 ```jsonc
 "custom/codex": {
@@ -130,7 +129,7 @@ waybar-codex-usage --sessions-dir tests/fixtures/codex-session.jsonl
 
 ### What `logs` / local mode means
 
-Local mode is an offline parser for the Codex CLI JSONL files under `~/.codex/sessions`. It does **not** call OpenAI or Hermes, and it does not know your account-level subscription state directly. It only reports the newest `payload.rate_limits` snapshot from a local `token_count` event.
+Local mode is an offline parser for the Codex CLI JSONL files under `~/.codex/sessions`. It does **not** call OpenAI, and it does not know your account-level subscription state directly. It only reports the newest `payload.rate_limits` snapshot from a local `token_count` event.
 
 That distinction matters because Codex can create recent session files that do not contain `token_count.rate_limits` events, and agent harnesses may use Codex without writing the same local rate-limit snapshots. In those cases, local mode may be missing, old, or marked `stale` even though your real account usage has changed.
 
@@ -138,20 +137,19 @@ Use local mode when you want a privacy-preserving offline fallback. For current 
 
 ```bash
 waybar-codex-usage --source codex
-# or: Codex API first, then Hermes compatibility, then local logs
+# or: Codex API first, then local logs
 waybar-codex-usage --source auto
 ```
 
 ## Backend support
 
-`waybar-codex-usage` is local-first by default, but its live account backend is now native Codex API first. Hermes remains only as a deprecated compatibility fallback.
+`waybar-codex-usage` is local-first by default, with a native Codex API backend for current account/subscription usage.
 
 | Source | Status | Network | Auth/token handling | What it reads | Notes |
 | --- | --- | --- | --- | --- | --- |
 | `codex` / `codex-api` | First-class live backend | Yes | Reads `$CODEX_HOME/auth.json` or `~/.codex/auth.json`; refreshes expiring tokens in that same Codex CLI file | Codex/ChatGPT usage API (`/wham/usage` on the ChatGPT backend) | Best source for current account/subscription usage and Spark additional buckets. Does not create a separate credential store. Requires a prior Codex CLI sign-in. |
 | `logs` | Stable default | No | None | Latest `token_count.rate_limits` snapshot from local Codex CLI JSONL sessions | Portable offline fallback. Only knows what Codex wrote to local logs, so it can be old/stale if recent sessions lack rate-limit snapshots or Codex was run through another harness. If a future/local sanitized snapshot includes Spark under `additional_rate_limits`, Spark is rendered in the tooltip only. |
-| `hermes` | Deprecated compatibility | Usually | Delegated to an existing Hermes Agent checkout | `agent.account_usage.fetch_account_usage("openai-codex")` | Requires Hermes Agent installed/configured locally with OpenAI-Codex auth. Kept for compatibility while the native Codex backend settles; expect this path to be sunset in a future release. |
-| `auto` | Convenience mode | Depends | Same as selected backend | Tries `codex`, then `hermes`, then `logs` | Not a separate backend; use it when live Codex data is preferred but stale local data is better than a hard error. |
+| `auto` | Convenience mode | Depends | Same as selected backend | Tries `codex`, then `logs` | Not a separate backend; use it when live Codex data is preferred but stale local data is better than a hard error. |
 
 Examples:
 
@@ -159,7 +157,6 @@ Examples:
 waybar-codex-usage --source codex
 waybar-codex-usage --source codex-api
 waybar-codex-usage --source logs
-waybar-codex-usage --source hermes
 waybar-codex-usage --source auto
 ```
 
@@ -202,10 +199,7 @@ When those fields are available, the tooltip adds lines such as `Spark Session: 
 | `WAYBAR_CODEX_API_BASE_URL` | Advanced override for the Codex/ChatGPT API base URL | `https://chatgpt.com/backend-api/codex` |
 | `WAYBAR_CODEX_USAGE_CACHE` | Rendered payload cache path | `$XDG_CACHE_HOME/waybar-codex-usage.json` or `~/.cache/waybar-codex-usage.json` |
 | `WAYBAR_CODEX_USAGE_TTL` | Cache TTL seconds | `300` |
-| `WAYBAR_CODEX_USAGE_SOURCE` | `codex`, `codex-api`, `logs`, `hermes`, or `auto` | `logs` |
-| `HERMES_AGENT_REPO` | Hermes checkout for deprecated compatibility backend | `~/.hermes/hermes-agent` |
-| `HERMES_AGENT_PYTHON` | Python executable to run the Hermes backend with, useful when Hermes dependencies live in its venv | first existing of `<repo>/venv/bin/python3`, `<repo>/venv/bin/python`, `<repo>/.venv/bin/python3`, `<repo>/.venv/bin/python` |
-| `WAYBAR_CODEX_HERMES_TIMEOUT` | Hermes backend subprocess timeout seconds | `25` |
+| `WAYBAR_CODEX_USAGE_SOURCE` | `codex`, `codex-api`, `logs`, or `auto` | `logs` |
 
 ## Waybar classes
 
@@ -246,7 +240,6 @@ This package targets Python 3.10+. Runtime dependency: `httpx` for the live Code
 
 - Keep the local-log backend stable and boring.
 - Treat the native Codex API backend as the primary live path.
-- Sunset the Hermes compatibility backend once the Codex backend has enough field time.
 - Add more sanitized fixtures as Codex API/log formats evolve.
 - Consider an AUR package only after the CLI shape settles.
 

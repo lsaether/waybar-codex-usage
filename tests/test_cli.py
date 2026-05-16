@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from waybar_codex_usage.cli import main
 
 
@@ -60,7 +62,12 @@ def test_cli_source_codex_uses_first_class_codex_api(monkeypatch, capsys, tmp_pa
     assert "Source: Codex usage API" in payload["tooltip"]
 
 
-def test_cli_auto_prefers_codex_api_before_hermes_and_logs(monkeypatch, capsys, tmp_path):
+def test_cli_rejects_removed_hermes_source(tmp_path):
+    with pytest.raises(SystemExit):
+        main(["--source", "hermes", "--cache", str(tmp_path / "cache.json"), "--refresh"])
+
+
+def test_cli_auto_prefers_codex_api_before_logs(monkeypatch, capsys, tmp_path):
     from datetime import datetime, timezone
 
     from waybar_codex_usage.models import Usage, Window
@@ -81,7 +88,6 @@ def test_cli_auto_prefers_codex_api_before_hermes_and_logs(monkeypatch, capsys, 
         raise AssertionError("fallback source should not be called")
 
     monkeypatch.setattr("waybar_codex_usage.cli.fetch_via_codex_api", fake_codex_api)
-    monkeypatch.setattr("waybar_codex_usage.cli.fetch_via_hermes", fail_if_called)
     monkeypatch.setattr("waybar_codex_usage.cli.latest_local_rate_limit", fail_if_called)
 
     rc = main(["--source", "auto", "--cache", str(tmp_path / "cache.json"), "--refresh"])
@@ -93,40 +99,7 @@ def test_cli_auto_prefers_codex_api_before_hermes_and_logs(monkeypatch, capsys, 
     assert "Source: Codex usage API" in payload["tooltip"]
 
 
-def test_cli_auto_falls_back_from_codex_to_hermes(monkeypatch, capsys, tmp_path):
-    from datetime import datetime, timezone
-
-    from waybar_codex_usage.models import Usage, Window
-
-    calls = []
-
-    def fake_codex_api(codex_home=None):
-        calls.append("codex")
-        raise RuntimeError("codex unavailable")
-
-    def fake_hermes(hermes_repo=None):
-        calls.append("hermes")
-        return Usage(
-            provider="openai-codex",
-            plan="Pro",
-            source="Hermes OpenAI-Codex usage helper",
-            fetched_at=datetime(2026, 5, 15, tzinfo=timezone.utc),
-            windows=(Window("Session", 55),),
-        )
-
-    monkeypatch.setattr("waybar_codex_usage.cli.fetch_via_codex_api", fake_codex_api)
-    monkeypatch.setattr("waybar_codex_usage.cli.fetch_via_hermes", fake_hermes)
-
-    rc = main(["--source", "auto", "--cache", str(tmp_path / "cache.json"), "--refresh"])
-
-    assert rc == 0
-    assert calls == ["codex", "hermes"]
-    payload = json.loads(capsys.readouterr().out)
-    assert payload["text"] == "CX 55%"
-    assert "Source: Hermes OpenAI-Codex usage helper" in payload["tooltip"]
-
-
-def test_cli_auto_falls_back_from_codex_and_hermes_to_logs(monkeypatch, capsys, tmp_path):
+def test_cli_auto_falls_back_from_codex_to_logs(monkeypatch, capsys, tmp_path):
     fixture_dir = Path(__file__).parent / "fixtures"
     calls = []
 
@@ -134,12 +107,7 @@ def test_cli_auto_falls_back_from_codex_and_hermes_to_logs(monkeypatch, capsys, 
         calls.append("codex")
         raise RuntimeError("codex unavailable")
 
-    def fake_hermes(hermes_repo=None):
-        calls.append("hermes")
-        raise RuntimeError("hermes unavailable")
-
     monkeypatch.setattr("waybar_codex_usage.cli.fetch_via_codex_api", fake_codex_api)
-    monkeypatch.setattr("waybar_codex_usage.cli.fetch_via_hermes", fake_hermes)
 
     rc = main([
         "--source",
@@ -152,7 +120,7 @@ def test_cli_auto_falls_back_from_codex_and_hermes_to_logs(monkeypatch, capsys, 
     ])
 
     assert rc == 0
-    assert calls == ["codex", "hermes"]
+    assert calls == ["codex"]
     payload = json.loads(capsys.readouterr().out)
     assert payload["text"] == "CX 21.2% W10.2%"
     assert "Source: local Codex session log" in payload["tooltip"]

@@ -11,7 +11,6 @@ from typing import Any, Sequence
 
 from .codex_api import default_codex_home, fetch_via_codex_api
 from .codex_logs import latest_local_rate_limit
-from .hermes_backend import fetch_via_hermes
 from .models import Usage
 from .timefmt import utc_now
 from .waybar import usage_to_waybar
@@ -73,20 +72,14 @@ def error_payload(message: str, stale_payload: dict[str, Any] | None = None) -> 
     return usage_to_waybar(usage)
 
 
-def fetch_usage(source: str, sessions_dir: Path, hermes_repo: Path | None, codex_home: Path | None) -> Usage:
+def fetch_usage(source: str, sessions_dir: Path, codex_home: Path | None) -> Usage:
     if source in {"codex", "codex-api"}:
         return fetch_via_codex_api(codex_home=codex_home)
     if source == "logs":
         return latest_local_rate_limit(sessions_dir)
-    if source == "hermes":
-        return fetch_via_hermes(hermes_repo)
     if source == "auto":
         try:
             return fetch_via_codex_api(codex_home=codex_home)
-        except Exception:
-            pass
-        try:
-            return fetch_via_hermes(hermes_repo)
         except Exception:
             return latest_local_rate_limit(sessions_dir)
     raise ValueError(f"unknown source: {source}")
@@ -94,11 +87,10 @@ def fetch_usage(source: str, sessions_dir: Path, hermes_repo: Path | None, codex
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Emit Codex usage as Waybar custom-module JSON")
-    parser.add_argument("--source", choices=("codex", "codex-api", "logs", "hermes", "auto"), default=os.environ.get("WAYBAR_CODEX_USAGE_SOURCE", "logs"), help="usage source (default: logs; auto tries codex, hermes, then logs)")
+    parser.add_argument("--source", choices=("codex", "codex-api", "logs", "auto"), default=os.environ.get("WAYBAR_CODEX_USAGE_SOURCE", "logs"), help="usage source (default: logs; auto tries codex, then logs)")
     parser.add_argument("--offline", action="store_true", help="legacy alias for --source logs; bypasses online/cache reads")
     parser.add_argument("--sessions-dir", type=Path, default=default_sessions_dir(), help="Codex session directory or a single JSONL file")
     parser.add_argument("--codex-home", type=Path, default=default_codex_home(), help="Codex home directory containing auth.json (default: CODEX_HOME or ~/.codex)")
-    parser.add_argument("--hermes-repo", type=Path, default=None, help="optional Hermes Agent checkout for --source hermes/auto")
     parser.add_argument("--cache", type=Path, default=default_cache_path(), help="rendered Waybar payload cache path")
     parser.add_argument("--ttl", type=int, default=int(os.environ.get("WAYBAR_CODEX_USAGE_TTL", "300")), help="cache TTL in seconds")
     parser.add_argument("--refresh", action="store_true", help="ignore cache and fetch now")
@@ -126,7 +118,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     stale_cache = read_cache(args.cache)
     try:
-        usage = fetch_usage(source, args.sessions_dir, args.hermes_repo, args.codex_home)
+        usage = fetch_usage(source, args.sessions_dir, args.codex_home)
     except Exception as exc:
         payload = error_payload(str(exc), stale_cache)
         emit(payload, plain=args.plain)

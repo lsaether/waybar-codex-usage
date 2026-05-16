@@ -33,7 +33,7 @@ def test_waybar_spark_extra_windows_render_only_in_tooltip():
     usage = Usage(
         provider="openai-codex",
         plan="Pro",
-        source="Hermes OpenAI-Codex usage helper",
+        source="Codex usage API",
         fetched_at=datetime(2026, 5, 15, 10, 2, tzinfo=timezone.utc),
         windows=(
             Window("Session", used_percent=12),
