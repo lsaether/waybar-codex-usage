@@ -13,16 +13,16 @@ CX 21.2% W10.2%
 - `W` is the weekly usage window when the selected backend exposes one.
 - Spark-specific limits, when exposed by the selected backend, stay out of the compact text and appear only in the tooltip.
 
-The project is intentionally small: no daemon, no telemetry, and Waybar-friendly exit behavior. The live Codex API backend uses `httpx`; the default `logs` source still works without network access.
+The project is intentionally small: no daemon, no telemetry, and Waybar-friendly exit behavior. The default `auto` source is API-first; the explicit `logs` source still works without network access.
 
-> **Backend reality check:** the first-class live backend is the Codex/ChatGPT usage API (`--source codex` / `--source codex-api`). `--source auto` tries Codex directly first, then falls back to local logs.
+> **Backend reality check:** the first-class live backend is the Codex/ChatGPT usage API (`--source codex` / `--source codex-api`). `--source auto` tries Codex directly first, then a stale cached API payload, then local logs.
 
 ## Features
 
 - First-class Codex/ChatGPT usage API backend using the installed Codex CLI auth file.
-- Parses local Codex CLI session JSONL files for `token_count.rate_limits` snapshots.
+- Keeps an explicit local/offline backend for Codex CLI session JSONL `token_count.rate_limits` snapshots.
 - Emits Waybar JSON with `text`, `tooltip`, `class`, `percentage`, and `alt`.
-- Caches rendered payloads to avoid scanning session logs every poll.
+- Caches rendered API payloads, plus explicit `logs` payloads when you select that source.
 - Click-refresh friendly with Waybar signals.
 - Tooltip-only Spark limit rendering when the backend exposes Spark as a separate additional rate-limit bucket.
 - Graceful failure mode: prints `CX --` and exits `0` by default so Waybar does not flap.
@@ -37,9 +37,9 @@ This tool does **not**:
 - upload session files;
 - print or cache prompts;
 - store OAuth tokens in this package;
-- require network access for the default local-log backend.
+- require network access for the explicit local-log backend.
 
-When `--source codex` / `--source codex-api` is selected, the tool reads the Codex CLI auth file at `$CODEX_HOME/auth.json` or `~/.codex/auth.json` and calls the Codex/ChatGPT usage endpoint directly. If the access token is expiring, it refreshes it and atomically writes the updated tokens back to the Codex CLI auth file. It does not create a separate credential store.
+When `auto`, `--source codex`, or `--source codex-api` uses the live backend, the tool reads the Codex CLI auth file at `$CODEX_HOME/auth.json` or `~/.codex/auth.json` and calls the Codex/ChatGPT usage endpoint directly. If the access token is expiring, it refreshes it and atomically writes the updated tokens back to the Codex CLI auth file. It does not create a separate credential store.
 
 If you open an issue, please use a sanitized fixture rather than raw Codex session logs.
 
@@ -94,7 +94,7 @@ If `waybar-codex-usage` is not on Waybar's PATH, use the full path from:
 uv tool dir --bin
 ```
 
-If you want live account-level subscription usage, prefer `auto` mode in Waybar. It tries the native Codex API first, then falls back to local logs:
+The default Waybar command uses `auto`: native Codex API first, then stale cached API data, then local logs:
 
 ```jsonc
 "custom/codex": {
@@ -121,10 +121,10 @@ waybar-codex-usage --source logs
 waybar-codex-usage --sessions-dir ~/.codex/sessions
 ```
 
-Default source is still `logs`, which parses local Codex CLI session files for offline/privacy compatibility. For live account usage, use `--source codex` or `--source auto`. You can also point local mode at a single sanitized JSONL file:
+Default source is `auto`. Use `--source logs` or `--offline` when you explicitly want the local Codex CLI session parser. Cache reads are source-aware: API-first runs reuse only cached API payloads, while explicit `logs` runs reuse only local-log payloads. You can also point local mode at a single sanitized JSONL file:
 
 ```bash
-waybar-codex-usage --sessions-dir tests/fixtures/codex-session.jsonl
+waybar-codex-usage --source logs --sessions-dir tests/fixtures/codex-session.jsonl
 ```
 
 ### What `logs` / local mode means
@@ -133,23 +133,23 @@ Local mode is an offline parser for the Codex CLI JSONL files under `~/.codex/se
 
 That distinction matters because Codex can create recent session files that do not contain `token_count.rate_limits` events, and agent harnesses may use Codex without writing the same local rate-limit snapshots. In those cases, local mode may be missing, old, or marked `stale` even though your real account usage has changed.
 
-Use local mode when you want a privacy-preserving offline fallback. For current subscription/account usage, use the native Codex API backend or `auto`:
+Use local mode when you explicitly want a privacy-preserving offline/dev/test backend. For current subscription/account usage, use the native Codex API backend or the default `auto` source:
 
 ```bash
 waybar-codex-usage --source codex
-# or: Codex API first, then local logs
+# or: Codex API first, then stale API cache, then local logs
 waybar-codex-usage --source auto
 ```
 
 ## Backend support
 
-`waybar-codex-usage` is local-first by default, with a native Codex API backend for current account/subscription usage.
+`waybar-codex-usage` is API-first by default, with local logs retained as an explicit offline/dev/test backend.
 
 | Source | Status | Network | Auth/token handling | What it reads | Notes |
 | --- | --- | --- | --- | --- | --- |
 | `codex` / `codex-api` | First-class live backend | Yes | Reads `$CODEX_HOME/auth.json` or `~/.codex/auth.json`; refreshes expiring tokens in that same Codex CLI file | Codex/ChatGPT usage API (`/wham/usage` on the ChatGPT backend) | Best source for current account/subscription usage and Spark additional buckets. Does not create a separate credential store. Requires a prior Codex CLI sign-in. |
-| `logs` | Stable default | No | None | Latest `token_count.rate_limits` snapshot from local Codex CLI JSONL sessions | Portable offline fallback. Only knows what Codex wrote to local logs, so it can be old/stale if recent sessions lack rate-limit snapshots or Codex was run through another harness. If a future/local sanitized snapshot includes Spark under `additional_rate_limits`, Spark is rendered in the tooltip only. |
-| `auto` | Convenience mode | Depends | Same as selected backend | Tries `codex`, then `logs` | Not a separate backend; use it when live Codex data is preferred but stale local data is better than a hard error. |
+| `logs` | Explicit offline/dev/test backend | No | None | Latest `token_count.rate_limits` snapshot from local Codex CLI JSONL sessions | Portable fallback. Only knows what Codex wrote to local logs, so it can be old/stale if recent sessions lack rate-limit snapshots or Codex was run through another harness. If a future/local sanitized snapshot includes Spark under `additional_rate_limits`, Spark is rendered in the tooltip only. |
+| `auto` | Default convenience mode | Depends | Same as selected backend | Tries `codex`, then stale cached Codex API output, then `logs` | Not a separate backend; use it when live Codex data is preferred and an older API payload is better than replacing it with local-log estimates. |
 
 Examples:
 
@@ -194,12 +194,12 @@ When those fields are available, the tooltip adds lines such as `Spark Session: 
 
 | Variable | Purpose | Default |
 | --- | --- | --- |
-| `CODEX_HOME` | Codex home directory containing `auth.json` for `--source codex`; also the base for default sessions | `~/.codex` |
+| `CODEX_HOME` | Codex home directory containing `auth.json` for the live backend | `~/.codex` |
 | `CODEX_SESSIONS_DIR` | Codex session log directory | `~/.codex/sessions` |
 | `WAYBAR_CODEX_API_BASE_URL` | Advanced override for the Codex/ChatGPT API base URL | `https://chatgpt.com/backend-api/codex` |
 | `WAYBAR_CODEX_USAGE_CACHE` | Rendered payload cache path | `$XDG_CACHE_HOME/waybar-codex-usage.json` or `~/.cache/waybar-codex-usage.json` |
 | `WAYBAR_CODEX_USAGE_TTL` | Cache TTL seconds | `300` |
-| `WAYBAR_CODEX_USAGE_SOURCE` | `codex`, `codex-api`, `logs`, or `auto` | `logs` |
+| `WAYBAR_CODEX_USAGE_SOURCE` | `codex`, `codex-api`, `logs`, or `auto` | `auto` |
 
 ## Waybar classes
 
@@ -231,15 +231,15 @@ CSS example:
 ```bash
 uv run --with pytest pytest -q
 uv build
-uv run waybar-codex-usage --sessions-dir tests/fixtures/codex-session.jsonl --refresh
+uv run waybar-codex-usage --source logs --sessions-dir tests/fixtures/codex-session.jsonl --refresh
 ```
 
 This package targets Python 3.10+. Runtime dependency: `httpx` for the live Codex API backend.
 
 ## Roadmap
 
-- Keep the local-log backend stable and boring.
 - Treat the native Codex API backend as the primary live path.
+- Keep the local-log backend stable and boring for explicit offline/dev/test use.
 - Add more sanitized fixtures as Codex API/log formats evolve.
 - Consider an AUR package only after the CLI shape settles.
 

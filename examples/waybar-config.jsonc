@@ -1,5 +1,5 @@
 // Add `custom/codex` to your Waybar modules.
-// Uses live Codex API first, then local logs.
+// Uses live Codex API first, then stale cached API data, then local logs.
 {
   "modules-right": ["custom/codex", "pulseaudio", "network", "cpu", "memory", "tray"],
 

@@ -39,6 +39,26 @@ def read_cache(path: Path) -> dict[str, Any] | None:
         return None
 
 
+def cached_from_codex_api(payload: dict[str, Any] | None) -> bool:
+    if not payload:
+        return False
+    return "Source: Codex usage API" in str(payload.get("tooltip") or "")
+
+
+def cached_from_local_logs(payload: dict[str, Any] | None) -> bool:
+    if not payload:
+        return False
+    return "Source: local Codex session log" in str(payload.get("tooltip") or "")
+
+
+def cache_matches_source(source: str, payload: dict[str, Any] | None) -> bool:
+    if source in {"auto", "codex", "codex-api"}:
+        return cached_from_codex_api(payload)
+    if source == "logs":
+        return cached_from_local_logs(payload)
+    return False
+
+
 def write_cache(path: Path, payload: dict[str, Any]) -> None:
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -77,17 +97,12 @@ def fetch_usage(source: str, sessions_dir: Path, codex_home: Path | None) -> Usa
         return fetch_via_codex_api(codex_home=codex_home)
     if source == "logs":
         return latest_local_rate_limit(sessions_dir)
-    if source == "auto":
-        try:
-            return fetch_via_codex_api(codex_home=codex_home)
-        except Exception:
-            return latest_local_rate_limit(sessions_dir)
     raise ValueError(f"unknown source: {source}")
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Emit Codex usage as Waybar custom-module JSON")
-    parser.add_argument("--source", choices=("codex", "codex-api", "logs", "auto"), default=os.environ.get("WAYBAR_CODEX_USAGE_SOURCE", "logs"), help="usage source (default: logs; auto tries codex, then logs)")
+    parser.add_argument("--source", choices=("codex", "codex-api", "logs", "auto"), default=os.environ.get("WAYBAR_CODEX_USAGE_SOURCE", "auto"), help="usage source (default: auto; auto tries codex, cached API, then logs)")
     parser.add_argument("--offline", action="store_true", help="legacy alias for --source logs; bypasses online/cache reads")
     parser.add_argument("--sessions-dir", type=Path, default=default_sessions_dir(), help="Codex session directory or a single JSONL file")
     parser.add_argument("--codex-home", type=Path, default=default_codex_home(), help="Codex home directory containing auth.json (default: CODEX_HOME or ~/.codex)")
@@ -112,20 +127,38 @@ def main(argv: Sequence[str] | None = None) -> int:
     # account API and do not reuse a cached online/API response.
     if not args.refresh and not args.offline and cache_fresh(args.cache, args.ttl):
         cached = read_cache(args.cache)
-        if cached:
+        if cached and cache_matches_source(source, cached):
             emit(cached, plain=args.plain)
             return 0
 
     stale_cache = read_cache(args.cache)
-    try:
-        usage = fetch_usage(source, args.sessions_dir, args.codex_home)
-    except Exception as exc:
-        payload = error_payload(str(exc), stale_cache)
-        emit(payload, plain=args.plain)
-        return 1 if args.strict else 0
+    source_cache = stale_cache if cache_matches_source(source, stale_cache) else None
+    if source == "auto":
+        try:
+            usage = fetch_via_codex_api(codex_home=args.codex_home)
+        except Exception as api_exc:
+            if cached_from_codex_api(stale_cache):
+                payload = error_payload(str(api_exc), stale_cache)
+                emit(payload, plain=args.plain)
+                return 1 if args.strict else 0
+            try:
+                usage = latest_local_rate_limit(args.sessions_dir)
+            except Exception as logs_exc:
+                message = f"Codex API unavailable: {api_exc}; local logs unavailable: {logs_exc}"
+                payload = error_payload(message, source_cache)
+                emit(payload, plain=args.plain)
+                return 1 if args.strict else 0
+    else:
+        try:
+            usage = fetch_usage(source, args.sessions_dir, args.codex_home)
+        except Exception as exc:
+            payload = error_payload(str(exc), source_cache)
+            emit(payload, plain=args.plain)
+            return 1 if args.strict else 0
 
     payload = usage_to_waybar(usage)
-    write_cache(args.cache, payload)
+    if source != "auto" or cached_from_codex_api(payload):
+        write_cache(args.cache, payload)
     emit(payload, plain=args.plain)
     return 0
 

@@ -62,6 +62,74 @@ def test_cli_source_codex_uses_first_class_codex_api(monkeypatch, capsys, tmp_pa
     assert "Source: Codex usage API" in payload["tooltip"]
 
 
+def test_cli_defaults_to_auto_and_fetches_codex_api(monkeypatch, capsys, tmp_path):
+    from datetime import datetime, timezone
+
+    from waybar_codex_usage.models import Usage, Window
+
+    calls = []
+
+    def fake_codex_api(codex_home=None):
+        calls.append("codex")
+        return Usage(
+            provider="openai-codex",
+            plan="Pro",
+            source="Codex usage API",
+            fetched_at=datetime(2026, 5, 15, tzinfo=timezone.utc),
+            windows=(Window("Session", 31), Window("Weekly", 9)),
+        )
+
+    def fail_if_logs_called(*args, **kwargs):
+        raise AssertionError("default source should try Codex API before local logs")
+
+    monkeypatch.setattr("waybar_codex_usage.cli.fetch_via_codex_api", fake_codex_api)
+    monkeypatch.setattr("waybar_codex_usage.cli.latest_local_rate_limit", fail_if_logs_called)
+
+    rc = main(["--cache", str(tmp_path / "cache.json"), "--refresh"])
+
+    assert rc == 0
+    assert calls == ["codex"]
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["text"] == "CX 31% W9%"
+    assert "Source: Codex usage API" in payload["tooltip"]
+
+
+def test_default_auto_ignores_fresh_local_cache_and_fetches_codex_api(monkeypatch, capsys, tmp_path):
+    from datetime import datetime, timezone
+
+    from waybar_codex_usage.models import Usage, Window
+
+    cache = tmp_path / "cache.json"
+    cache.write_text(json.dumps({
+        "text": "CX 99%",
+        "tooltip": "Codex usage\nSource: local Codex session log\nClick to refresh",
+        "class": "stale",
+        "percentage": 99,
+        "alt": "codex",
+    }) + "\n")
+    calls = []
+
+    def fake_codex_api(codex_home=None):
+        calls.append("codex")
+        return Usage(
+            provider="openai-codex",
+            plan="Pro",
+            source="Codex usage API",
+            fetched_at=datetime(2026, 5, 15, tzinfo=timezone.utc),
+            windows=(Window("Session", 22),),
+        )
+
+    monkeypatch.setattr("waybar_codex_usage.cli.fetch_via_codex_api", fake_codex_api)
+
+    rc = main(["--cache", str(cache)])
+
+    assert rc == 0
+    assert calls == ["codex"]
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["text"] == "CX 22%"
+    assert "Source: Codex usage API" in payload["tooltip"]
+
+
 def test_cli_rejects_removed_hermes_source(tmp_path):
     with pytest.raises(SystemExit):
         main(["--source", "hermes", "--cache", str(tmp_path / "cache.json"), "--refresh"])
@@ -124,6 +192,79 @@ def test_cli_auto_falls_back_from_codex_to_logs(monkeypatch, capsys, tmp_path):
     payload = json.loads(capsys.readouterr().out)
     assert payload["text"] == "CX 21.2% W10.2%"
     assert "Source: local Codex session log" in payload["tooltip"]
+
+
+def test_cli_auto_prefers_stale_codex_api_cache_before_local_logs(monkeypatch, capsys, tmp_path):
+    from datetime import datetime, timezone
+
+    from waybar_codex_usage.models import Usage, Window
+
+    cache = tmp_path / "cache.json"
+    cached_payload = {
+        "text": "CX 40% W20%",
+        "tooltip": "Codex usage · Pro\nUpdated: Fri 10:00:00 UTC\nSource: Codex usage API\nClick to refresh",
+        "class": "ok",
+        "percentage": 40,
+        "alt": "codex",
+    }
+    cache.write_text(json.dumps(cached_payload) + "\n")
+    calls = []
+
+    def fake_codex_api(codex_home=None):
+        calls.append("codex")
+        raise RuntimeError("codex unavailable")
+
+    def fake_logs(sessions_dir):
+        calls.append("logs")
+        return Usage(
+            provider="openai-codex",
+            plan="Pro",
+            source="local Codex session log",
+            fetched_at=datetime(2026, 5, 15, tzinfo=timezone.utc),
+            windows=(Window("Session", 99),),
+            stale=True,
+        )
+
+    monkeypatch.setattr("waybar_codex_usage.cli.fetch_via_codex_api", fake_codex_api)
+    monkeypatch.setattr("waybar_codex_usage.cli.latest_local_rate_limit", fake_logs)
+
+    rc = main(["--source", "auto", "--cache", str(cache), "--refresh"])
+
+    assert rc == 0
+    assert calls == ["codex"]
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["text"] == "CX 40% W20%"
+    assert "stale" in payload["class"].split()
+    assert "Refresh error: codex unavailable" in payload["tooltip"]
+    assert "Source: Codex usage API" in payload["tooltip"]
+
+
+def test_cli_auto_does_not_use_cached_local_logs_when_all_live_sources_fail(monkeypatch, capsys, tmp_path):
+    cache = tmp_path / "cache.json"
+    cache.write_text(json.dumps({
+        "text": "CX 88%",
+        "tooltip": "Codex usage\nSource: local Codex session log\nClick to refresh",
+        "class": "stale",
+        "percentage": 88,
+        "alt": "codex",
+    }) + "\n")
+
+    def fake_codex_api(codex_home=None):
+        raise RuntimeError("codex unavailable")
+
+    def fake_logs(sessions_dir):
+        raise RuntimeError("logs unavailable")
+
+    monkeypatch.setattr("waybar_codex_usage.cli.fetch_via_codex_api", fake_codex_api)
+    monkeypatch.setattr("waybar_codex_usage.cli.latest_local_rate_limit", fake_logs)
+
+    rc = main(["--source", "auto", "--cache", str(cache), "--refresh"])
+
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["text"] == "CX --"
+    assert payload["class"] == "error"
+    assert "Source: local Codex session log" not in payload["tooltip"]
 
 
 def test_cli_waybar_friendly_errors_exit_zero(capsys, tmp_path):
