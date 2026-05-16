@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .codex_payload import spark_extra_windows_from_payload
 from .models import Usage, Window
 from .timefmt import parse_dt
 
@@ -101,4 +102,5 @@ def latest_local_rate_limit(sessions_dir: Path, *, file_limit: int = 40, max_sca
         windows=tuple(windows),
         details=("Parsed newest local Codex CLI rate-limit snapshot.",),
         stale=True,
+        extra_windows=spark_extra_windows_from_payload(payload),
     )

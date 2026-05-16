@@ -24,11 +24,18 @@ class RawWindow:
     reset_at = datetime(2026, 5, 15, 12, 30, tzinfo=timezone.utc)
     detail = "test detail"
 
+class SparkWindow:
+    label = "Spark Session"
+    used_percent = 6.0
+    reset_at = datetime(2026, 5, 15, 13, 0, tzinfo=timezone.utc)
+    detail = "5h window"
+
 class Snapshot:
     available = True
     provider = "openai-codex"
     plan = "Pro"
     windows = (RawWindow(),)
+    extra_windows = (SparkWindow(),)
     details = ("from fake Hermes",)
 
 def fetch_account_usage(provider):
@@ -56,4 +63,6 @@ def fetch_account_usage(provider):
     assert usage.plan == "Pro"
     assert usage.windows[0].label == "Session"
     assert usage.windows[0].used_percent == 12.5
+    assert usage.extra_windows[0].label == "Spark Session"
+    assert usage.extra_windows[0].used_percent == 6.0
     assert usage.details == ("from fake Hermes",)

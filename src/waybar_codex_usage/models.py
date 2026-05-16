@@ -28,3 +28,4 @@ class Usage:
     details: tuple[str, ...] = ()
     stale: bool = False
     error: str | None = None
+    extra_windows: tuple[Window, ...] = ()

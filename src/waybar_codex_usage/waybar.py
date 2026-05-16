@@ -56,7 +56,7 @@ def usage_to_waybar(usage: Usage) -> dict[str, Any]:
     if usage.plan:
         title += f" · {usage.plan}"
     lines = [title]
-    for window in usage.windows:
+    for window in (*usage.windows, *usage.extra_windows):
         if window.used_percent is None:
             base = f"{window.label}: unavailable"
         else:

@@ -15,6 +15,18 @@ def test_cli_outputs_waybar_json_from_local_logs(capsys, tmp_path):
     assert payload["class"] == "stale"
 
 
+def test_cli_outputs_spark_only_in_tooltip_from_sanitized_fixture(capsys, tmp_path):
+    fixture = Path(__file__).parent / "fixtures" / "codex-session-with-spark.jsonl"
+
+    rc = main(["--source", "logs", "--sessions-dir", str(fixture), "--cache", str(tmp_path / "cache.json"), "--refresh"])
+
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["text"] == "CX 27% W11%"
+    assert "Spark Session: 94% remaining (6% used)" in payload["tooltip"]
+    assert "Spark Weekly: 98% remaining (2% used)" in payload["tooltip"]
+
+
 def test_cli_waybar_friendly_errors_exit_zero(capsys, tmp_path):
     rc = main(["--source", "logs", "--sessions-dir", str(tmp_path / "missing"), "--cache", str(tmp_path / "cache.json"), "--refresh"])
 

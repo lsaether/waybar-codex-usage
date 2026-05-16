@@ -25,7 +25,33 @@ def test_waybar_payload_is_compact_and_includes_tooltip_details():
     assert payload["alt"] == "codex"
     assert "Codex usage · Pro" in payload["tooltip"]
     assert "Session: 79% remaining (21.2% used)" in payload["tooltip"]
+    assert "Spark" not in payload["tooltip"]
     assert "Source: local Codex session log" in payload["tooltip"]
+
+
+def test_waybar_spark_extra_windows_render_only_in_tooltip():
+    usage = Usage(
+        provider="openai-codex",
+        plan="Pro",
+        source="Hermes OpenAI-Codex usage helper",
+        fetched_at=datetime(2026, 5, 15, 10, 2, tzinfo=timezone.utc),
+        windows=(
+            Window("Session", used_percent=12),
+            Window("Weekly", used_percent=8),
+        ),
+        extra_windows=(
+            Window("Spark Session", used_percent=92, reset_at=datetime(2026, 5, 15, 13, tzinfo=timezone.utc)),
+            Window("Spark Weekly", used_percent=2, reset_at=datetime(2026, 5, 22, 13, tzinfo=timezone.utc)),
+        ),
+    )
+
+    payload = usage_to_waybar(usage)
+
+    assert payload["text"] == "CX 12% W8%"
+    assert payload["class"] == "ok"
+    assert payload["percentage"] == 12
+    assert "Spark Session: 8% remaining (92% used)" in payload["tooltip"]
+    assert "Spark Weekly: 98% remaining (2% used)" in payload["tooltip"]
 
 
 def test_waybar_class_warns_and_criticals_on_high_usage():

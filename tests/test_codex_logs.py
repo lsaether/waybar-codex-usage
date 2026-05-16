@@ -14,7 +14,21 @@ def test_latest_local_rate_limit_extracts_newest_rate_limit_without_prompt_text(
     assert usage.windows[0].used_percent == 21.2
     assert usage.windows[1].label == "Weekly"
     assert usage.windows[1].used_percent == 10.2
+    assert usage.extra_windows == ()
     assert "fake prompt" not in "\n".join(usage.details)
+
+
+def test_latest_local_rate_limit_extracts_spark_as_tooltip_only_extra_window():
+    usage = latest_local_rate_limit(Path(__file__).parent / "fixtures" / "codex-session-with-spark.jsonl")
+
+    assert usage.windows[0].label == "Session"
+    assert usage.windows[0].used_percent == 27
+    assert usage.windows[1].label == "Weekly"
+    assert usage.windows[1].used_percent == 11
+    assert tuple((window.label, window.used_percent) for window in usage.extra_windows) == (
+        ("Spark Session", 6.0),
+        ("Spark Weekly", 2.0),
+    )
 
 
 def test_latest_local_rate_limit_fails_cleanly_when_no_events(tmp_path):

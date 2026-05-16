@@ -11,6 +11,7 @@ CX 21.2% W10.2%
 - `CX` is the compact Codex label.
 - The first percentage is the current/session usage window.
 - `W` is the weekly usage window when the selected backend exposes one.
+- Spark-specific limits, when exposed by the selected backend, stay out of the compact text and appear only in the tooltip.
 
 The project is intentionally small: Python standard library only at runtime, no daemon, no telemetry, and Waybar-friendly exit behavior.
 
@@ -23,6 +24,7 @@ The project is intentionally small: Python standard library only at runtime, no 
 - Caches rendered payloads to avoid scanning session logs every poll.
 - Click-refresh friendly with Waybar signals.
 - Optional Hermes Agent backend for users who already have Hermes configured.
+- Tooltip-only Spark limit rendering when the backend exposes Spark as a separate additional rate-limit bucket.
 - Graceful failure mode: prints `CX --` and exits `0` by default so Waybar does not flap.
 
 ## Privacy model
@@ -141,8 +143,8 @@ waybar-codex-usage --source auto
 
 | Source | Status | Network | Auth/token handling | What it reads | Notes |
 | --- | --- | --- | --- | --- | --- |
-| `logs` | Stable default | No | None | Latest `token_count.rate_limits` snapshot from local Codex CLI JSONL sessions | Portable offline fallback. Only knows what Codex wrote to local logs, so it can be old/stale if recent sessions lack rate-limit snapshots or Codex was run through another harness. |
-| `hermes` | Optional / experimental | Usually | Delegated to an existing Hermes Agent checkout | `agent.account_usage.fetch_account_usage("openai-codex")` | Requires Hermes Agent installed/configured locally with OpenAI-Codex auth. Does not require a Hermes TUI/gateway/daemon to be running. This package does not store OAuth tokens. It imports Hermes directly when dependencies are available, otherwise it tries the Hermes venv Python. Can break if Hermes or the upstream account API changes. |
+| `logs` | Stable default | No | None | Latest `token_count.rate_limits` snapshot from local Codex CLI JSONL sessions | Portable offline fallback. Only knows what Codex wrote to local logs, so it can be old/stale if recent sessions lack rate-limit snapshots or Codex was run through another harness. If a future/local sanitized snapshot includes Spark under `additional_rate_limits`, Spark is rendered in the tooltip only. |
+| `hermes` | Optional / experimental | Usually | Delegated to an existing Hermes Agent checkout | `agent.account_usage.fetch_account_usage("openai-codex")`, plus Spark `additional_rate_limits` from the same Codex usage endpoint when available | Requires Hermes Agent installed/configured locally with OpenAI-Codex auth. Does not require a Hermes TUI/gateway/daemon to be running. This package does not store OAuth tokens. It imports Hermes directly when dependencies are available, otherwise it tries the Hermes venv Python. Can break if Hermes or the upstream account API changes. |
 | `auto` | Convenience mode | Depends | Same as selected backend | Tries `hermes`, then falls back to `logs` | Not a separate backend; good for personal machines where live Hermes usage is preferred when Hermes is available, but stale local data is better than a hard error. On machines without Hermes, it behaves as local-log fallback. |
 
 Examples:
@@ -161,6 +163,27 @@ Possible future backend work:
 - more sanitized fixtures for new Codex log shapes.
 
 Browser scraping is intentionally not a planned default backend: it is fragile, privacy-sensitive, and a poor fit for a small Waybar module.
+
+### Spark limits
+
+Spark is tracked as a separate additional rate-limit bucket rather than folded into the normal `CX` session/weekly text. Sanitized account-usage payloads currently expose it with fields shaped like:
+
+```json
+{
+  "additional_rate_limits": [
+    {
+      "limit_name": "GPT-5.3-Codex-Spark",
+      "metered_feature": "codex_bengalfox",
+      "rate_limit": {
+        "primary_window": {"used_percent": 6, "reset_at": 1778897088, "limit_window_seconds": 18000},
+        "secondary_window": {"used_percent": 2, "reset_at": 1779483888, "limit_window_seconds": 604800}
+      }
+    }
+  ]
+}
+```
+
+When those fields are available, the tooltip adds lines such as `Spark Session: 94% remaining (6% used)` and `Spark Weekly: 98% remaining (2% used)`. The compact text remains backward-compatible by default, e.g. `CX 27% W11%`; Spark does not affect the module `percentage` or warning/critical class.
 
 ## Environment variables
 
