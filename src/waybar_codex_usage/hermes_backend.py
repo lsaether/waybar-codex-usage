@@ -12,11 +12,9 @@ import os
 import re
 import subprocess
 import sys
-from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
-from .codex_payload import spark_extra_windows_from_payload
 from .models import Usage, Window
 from .timefmt import parse_dt, utc_now
 
@@ -73,78 +71,6 @@ payload = {
         for raw in getattr(snapshot, "extra_windows", ())
     ],
 }
-
-
-def _resolve_codex_usage_url(base_url):
-    normalized = (base_url or "").strip().rstrip("/")
-    if not normalized:
-        normalized = "https://chatgpt.com/backend-api/codex"
-    if normalized.endswith("/codex"):
-        normalized = normalized[: -len("/codex")]
-    if "/backend-api" in normalized:
-        return normalized + "/wham/usage"
-    return normalized + "/api/codex/usage"
-
-
-def _spark_extra_windows_from_usage_payload(raw_payload):
-    items = []
-    for container in (raw_payload, (raw_payload.get("rate_limits") or {})):
-        if not isinstance(container, dict):
-            continue
-        raw_items = container.get("additional_rate_limits") or container.get("additional_limits") or []
-        if isinstance(raw_items, list):
-            items.extend(x for x in raw_items if isinstance(x, dict))
-
-    windows = []
-    for item in items:
-        searchable = " ".join(str(item.get(key) or "") for key in ("limit_name", "name", "label", "metered_feature", "limit_id")).lower()
-        if "spark" not in searchable and "bengalfox" not in searchable:
-            continue
-        rate_limit = item.get("rate_limit") if isinstance(item.get("rate_limit"), dict) else item
-        for key, suffix in (("primary_window", "Session"), ("primary", "Session"), ("secondary_window", "Weekly"), ("secondary", "Weekly")):
-            raw_window = rate_limit.get(key) if isinstance(rate_limit, dict) else None
-            if not isinstance(raw_window, dict):
-                continue
-            used = raw_window.get("used_percent")
-            reset = raw_window.get("reset_at", raw_window.get("resets_at"))
-            if used is None and reset is None:
-                continue
-            windows.append({
-                "label": f"Spark {suffix}",
-                "used_percent": used,
-                "reset_at": clean_dt(reset),
-                "detail": None,
-            })
-    return windows
-
-
-def _fetch_live_spark_extra_windows():
-    try:
-        import httpx
-        from hermes_cli.auth import _read_codex_tokens, resolve_codex_runtime_credentials
-
-        creds = resolve_codex_runtime_credentials(refresh_if_expiring=True)
-        token_data = _read_codex_tokens()
-        tokens = token_data.get("tokens") or {}
-        account_id = str(tokens.get("account_id", "") or "").strip() or None
-        headers = {
-            "Authorization": f"Bearer {creds['api_key']}",
-            "Accept": "application/json",
-            "User-Agent": "codex-cli",
-        }
-        if account_id:
-            headers["ChatGPT-Account-Id"] = account_id
-        with httpx.Client(timeout=float(os.environ.get("WAYBAR_CODEX_HERMES_TIMEOUT", "25"))) as client:
-            response = client.get(_resolve_codex_usage_url(str(creds.get("base_url", ""))), headers=headers)
-            response.raise_for_status()
-        return _spark_extra_windows_from_usage_payload(response.json() or {})
-    except Exception:
-        return []
-
-
-if not payload["extra_windows"]:
-    payload["extra_windows"] = _fetch_live_spark_extra_windows()
-
 print(json.dumps(payload, ensure_ascii=False))
 '''
 
@@ -193,52 +119,6 @@ def _resolve_hermes_python(repo: Path) -> Path | None:
         except OSError:
             continue
     return None
-
-
-def _resolve_codex_usage_url(base_url: str) -> str:
-    normalized = (base_url or "").strip().rstrip("/")
-    if not normalized:
-        normalized = "https://chatgpt.com/backend-api/codex"
-    if normalized.endswith("/codex"):
-        normalized = normalized[: -len("/codex")]
-    if "/backend-api" in normalized:
-        return normalized + "/wham/usage"
-    return normalized + "/api/codex/usage"
-
-
-def _fetch_live_spark_windows_via_hermes_auth() -> tuple[Window, ...]:
-    # Imported lazily so the package stays stdlib-only unless the optional
-    # Hermes backend is selected and Hermes' own dependency environment is used.
-    import httpx  # type: ignore
-    from hermes_cli.auth import _read_codex_tokens, resolve_codex_runtime_credentials  # type: ignore
-
-    creds = resolve_codex_runtime_credentials(refresh_if_expiring=True)
-    token_data = _read_codex_tokens()
-    tokens = token_data.get("tokens") or {}
-    account_id = str(tokens.get("account_id", "") or "").strip() or None
-    headers = {
-        "Authorization": f"Bearer {creds['api_key']}",
-        "Accept": "application/json",
-        "User-Agent": "codex-cli",
-    }
-    if account_id:
-        headers["ChatGPT-Account-Id"] = account_id
-    with httpx.Client(timeout=float(os.environ.get("WAYBAR_CODEX_HERMES_TIMEOUT", "25"))) as client:
-        response = client.get(_resolve_codex_usage_url(str(creds.get("base_url", ""))), headers=headers)
-        response.raise_for_status()
-    return spark_extra_windows_from_payload(response.json() or {})
-
-
-def _with_live_spark_windows(usage: Usage) -> Usage:
-    if usage.extra_windows:
-        return usage
-    try:
-        extra_windows = _fetch_live_spark_windows_via_hermes_auth()
-    except Exception:
-        return usage
-    if not extra_windows:
-        return usage
-    return replace(usage, extra_windows=extra_windows)
 
 
 def _windows_from_mapping(data: dict[str, Any], key: str) -> tuple[Window, ...]:
@@ -313,7 +193,7 @@ def _fetch_in_current_process(repo: Path) -> Usage:
     from agent.account_usage import fetch_account_usage  # type: ignore
 
     snapshot = fetch_account_usage("openai-codex")
-    return _with_live_spark_windows(_usage_from_snapshot(snapshot, source="Hermes OpenAI-Codex usage helper"))
+    return _usage_from_snapshot(snapshot, source="Hermes OpenAI-Codex usage helper")
 
 
 def _fetch_with_hermes_python(repo: Path, python: Path) -> Usage:

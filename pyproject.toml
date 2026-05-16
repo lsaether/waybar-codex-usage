@@ -22,7 +22,7 @@ classifiers = [
   "Topic :: Desktop Environment",
   "Topic :: Utilities",
 ]
-dependencies = []
+dependencies = ["httpx>=0.25"]
 
 [project.urls]
 Homepage = "https://github.com/lsaether/waybar-codex-usage"

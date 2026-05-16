@@ -6,5 +6,7 @@
 - Local Codex JSONL `token_count.rate_limits` parser.
 - Waybar JSON renderer.
 - Cache, click-refresh, plain-text, and Waybar-friendly error output.
-- Optional Hermes Agent backend.
+- Optional deprecated Hermes Agent compatibility backend.
+- First-class native Codex API backend (`--source codex` / `--source codex-api`) using Codex CLI auth.
+- `--source auto` now tries Codex API, then Hermes, then local logs.
 - Tooltip-only Spark limit rendering from separate `additional_rate_limits` buckets.
